@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: hamara-morcha-server
-    runtime: node
-    buildCommand: npm install
-    startCommand: node index.js
-    envVars:
-      - key: DATABASE_URL
-        sync: false

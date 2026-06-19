@@ -1,0 +1,14 @@
+[build]
+  command = "echo no build"
+  publish = "public"
+
+[functions]
+  directory = "netlify/functions"
+  external_node_modules = ["express"]
+  node_bundler = "esbuild"
+
+[[redirects]]
+  force = true
+  from = "/*"
+  to = "/.netlify/functions/api"
+  status = 200
