@@ -16,16 +16,16 @@ app.use(express.json());
 
 app.get("/articles", async (req, res) => {
   const result = await pool.query(
-    "SELECT * FROM articles ORDER BY created_at DESC"
+    "SELECT * FROM articles ORDER BY created_at DESC",
   );
   res.json(result.rows);
 });
 
 app.post("/articles", async (req, res) => {
-  const { category, title, summary, image_url, image_id } = req.body;
+  const { category, title, content, image_url, image_id } = req.body;
   const result = await pool.query(
-    "INSERT INTO articles (category, title, summary, image_url, image_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-    [category, title, summary, image_url, image_id]
+    "INSERT INTO articles (category, title, content, image_url, image_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+    [category, title, content, image_url, image_id],
   );
   res.json(result.rows[0]);
 });
@@ -33,7 +33,7 @@ app.post("/articles", async (req, res) => {
 app.delete("/articles/:id", async (req, res) => {
   const found = await pool.query(
     "SELECT image_id FROM articles WHERE id = $1",
-    [req.params.id]
+    [req.params.id],
   );
   const imageId = found.rows[0]?.image_id;
   if (imageId) {
