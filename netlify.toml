@@ -1,11 +1,10 @@
 [build]
-  command = "echo no build"
+  command = "echo done"
   publish = "public"
 
 [functions]
   directory = "netlify/functions"
   external_node_modules = ["express"]
-  node_bundler = "esbuild"
 
 [[redirects]]
   force = true
