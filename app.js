@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import { v2 as cloudinary } from "cloudinary";
 import { pool } from "./db.js";
-import { OAuth2Client } from "google-auth-library";
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -13,7 +13,6 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const ALLOWED = (process.env.ALLOWED_EMAILS || "")
   .split(",")
@@ -26,20 +25,30 @@ async function requireAuth(req, res, next) {
     const token = header.startsWith("Bearer ") ? header.slice(7) : "";
     if (!token) return res.status(401).json({ error: "login ज़रूरी" });
 
-    const ticket = await googleClient.verifyIdToken({
-      idToken: token,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-    const payload = ticket.getPayload();
-    const email = (payload.email || "").toLowerCase();
+    const r = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${token}`,
+    );
+    if (!r.ok) {
+      return res.status(401).json({ error: "token गलत या expire" });
+    }
 
-    if (!payload.email_verified || !ALLOWED.includes(email)) {
+    const payload = await r.json();
+
+    if (payload.aud !== process.env.GOOGLE_CLIENT_ID) {
+      return res.status(403).json({ error: "गलत app (Client ID मेल नहीं)" });
+    }
+
+    const email = (payload.email || "").toLowerCase();
+    const verified =
+      payload.email_verified === "true" || payload.email_verified === true;
+
+    if (!verified || !ALLOWED.includes(email)) {
       return res.status(403).json({ error: "अनुमति नहीं", email });
     }
 
     next();
   } catch (err) {
-    return res.status(401).json({ error: "token गलत", detail: err.message });
+    return res.status(401).json({ error: "token जाँच fail", detail: err.message });
   }
 }
 
