@@ -67,19 +67,19 @@ app.get("/articles/:id", async (req, res) => {
 });
 
 app.post("/articles", requireAuth, async (req, res) => {
-  const { category, title, content, image_url, image_id } = req.body;
+  const { category, title, content, image_url, image_id, pdf_url } = req.body;
   const result = await pool.query(
-    "INSERT INTO articles (category, title, content, image_url, image_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-    [category, title, content, image_url, image_id],
+    "INSERT INTO articles (category, title, content, image_url, image_id, pdf_url) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+    [category, title, content, image_url, image_id, pdf_url],
   );
   res.json(result.rows[0]);
 });
 
 app.put("/articles/:id", requireAuth, async (req, res) => {
-  const { category, title, content, image_url, image_id } = req.body;
+  const { category, title, content, image_url, image_id, pdf_url } = req.body;
   const result = await pool.query(
-    "UPDATE articles SET category = $1, title = $2, content = $3, image_url = $4, image_id = $5 WHERE id = $6 RETURNING *",
-    [category, title, content, image_url, image_id, req.params.id],
+    "UPDATE articles SET category = $1, title = $2, content = $3, image_url = $4, image_id = $5, pdf_url = $6 WHERE id = $7 RETURNING *",
+    [category, title, content, image_url, image_id, pdf_url, req.params.id],
   );
   res.json(result.rows[0]);
 });
