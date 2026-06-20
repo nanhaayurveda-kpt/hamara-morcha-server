@@ -66,19 +66,20 @@ app.post("/articles", requireAuth, async (req, res) => {
   res.json(result.rows[0]);
 });
 
+app.put("/articles/:id", requireAuth, async (req, res) => {
+  const { category, title, content, image_url, image_id } = req.body;
+  const result = await pool.query(
+    "UPDATE articles SET category = $1, title = $2, content = $3, image_url = $4, image_id = $5 WHERE id = $6 RETURNING *",
+    [category, title, content, image_url, image_id, req.params.id],
+  );
+  res.json(result.rows[0]);
+});
+
 app.delete("/articles/:id", requireAuth, async (req, res) => {
   const found = await pool.query(
     "SELECT image_id FROM articles WHERE id = $1",
     [req.params.id],
   );
-  app.put("/articles/:id", requireAuth, async (req, res) => {
-    const { category, title, content, image_url, image_id } = req.body;
-    const result = await pool.query(
-      "UPDATE articles SET category = $1, title = $2, content = $3, image_url = $4, image_id = $5 WHERE id = $6 RETURNING *",
-      [category, title, content, image_url, image_id, req.params.id],
-    );
-    res.json(result.rows[0]);
-  });
   const imageId = found.rows[0]?.image_id;
   if (imageId) {
     await cloudinary.uploader.destroy(imageId);
