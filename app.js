@@ -50,6 +50,13 @@ app.get("/articles", async (req, res) => {
   res.json(result.rows);
 });
 
+app.get("/articles/:id", async (req, res) => {
+  const result = await pool.query("SELECT * FROM articles WHERE id = $1", [
+    req.params.id,
+  ]);
+  res.json(result.rows[0]);
+});
+
 app.post("/articles", requireAuth, async (req, res) => {
   const { category, title, content, image_url, image_id } = req.body;
   const result = await pool.query(
