@@ -34,12 +34,12 @@ async function requireAuth(req, res, next) {
     const email = (payload.email || "").toLowerCase();
 
     if (!payload.email_verified || !ALLOWED.includes(email)) {
-      return res.status(403).json({ error: "अनुमति नहीं" });
+      return res.status(403).json({ error: "अनुमति नहीं", email });
     }
 
     next();
   } catch (err) {
-    return res.status(401).json({ error: "token गलत" });
+    return res.status(401).json({ error: "token गलत", detail: err.message });
   }
 }
 
@@ -76,10 +76,9 @@ app.put("/articles/:id", requireAuth, async (req, res) => {
 });
 
 app.delete("/articles/:id", requireAuth, async (req, res) => {
-  const found = await pool.query(
-    "SELECT image_id FROM articles WHERE id = $1",
-    [req.params.id],
-  );
+  const found = await pool.query("SELECT image_id FROM articles WHERE id = $1", [
+    req.params.id,
+  ]);
   const imageId = found.rows[0]?.image_id;
   if (imageId) {
     await cloudinary.uploader.destroy(imageId);
