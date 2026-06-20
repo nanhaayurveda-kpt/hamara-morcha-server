@@ -39,7 +39,8 @@ async function requireAuth(req, res, next) {
 
     next();
   } catch (err) {
-    return res.status(401).json({ error: "token गलत" });
+    console.error("AUTH ERROR:", err.message);
+    return res.status(401).json({ error: "token गलत", detail: err.message });
   }
 }
 
