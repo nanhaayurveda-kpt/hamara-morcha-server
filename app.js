@@ -90,7 +90,11 @@ app.delete("/articles/:id", requireAuth, async (req, res) => {
   ]);
   const imageId = found.rows[0]?.image_id;
   if (imageId) {
-    await cloudinary.uploader.destroy(imageId);
+    try {
+      await cloudinary.uploader.destroy(imageId);
+    } catch (e) {
+      console.error("cloudinary destroy failed:", e.message);
+    }
   }
   await pool.query("DELETE FROM articles WHERE id = $1", [req.params.id]);
   res.json({ ok: true });
