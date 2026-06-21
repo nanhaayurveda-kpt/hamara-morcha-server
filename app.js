@@ -27,33 +27,52 @@ const ALLOWED = (process.env.ALLOWED_EMAILS || "")
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
 
+async function verifyToken(token) {
+  const r = await fetch(
+    `https://oauth2.googleapis.com/tokeninfo?id_token=${token}`,
+  );
+  if (!r.ok) return null;
+  const payload = await r.json();
+  if (payload.aud !== process.env.GOOGLE_CLIENT_ID) return null;
+  const verified =
+    payload.email_verified === "true" || payload.email_verified === true;
+  if (!verified) return null;
+  return payload;
+}
+
 async function requireAuth(req, res, next) {
   try {
     const header = req.headers.authorization || "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : "";
     if (!token) return res.status(401).json({ error: "login ज़रूरी" });
 
-    const r = await fetch(
-      `https://oauth2.googleapis.com/tokeninfo?id_token=${token}`,
-    );
-    if (!r.ok) {
-      return res.status(401).json({ error: "token गलत या expire" });
-    }
-
-    const payload = await r.json();
-
-    if (payload.aud !== process.env.GOOGLE_CLIENT_ID) {
-      return res.status(403).json({ error: "गलत app (Client ID मेल नहीं)" });
-    }
+    const payload = await verifyToken(token);
+    if (!payload) return res.status(401).json({ error: "token गलत या expire" });
 
     const email = (payload.email || "").toLowerCase();
-    const verified =
-      payload.email_verified === "true" || payload.email_verified === true;
-
-    if (!verified || !ALLOWED.includes(email)) {
+    if (!ALLOWED.includes(email)) {
       return res.status(403).json({ error: "अनुमति नहीं", email });
     }
 
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: "token जाँच fail", detail: err.message });
+  }
+}
+
+async function verifyGoogle(req, res, next) {
+  try {
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+    if (!token) return res.status(401).json({ error: "login ज़रूरी" });
+
+    const payload = await verifyToken(token);
+    if (!payload) return res.status(401).json({ error: "token गलत या expire" });
+
+    req.googleUser = {
+      name: payload.name || "पाठक",
+      email: (payload.email || "").toLowerCase(),
+    };
     next();
   } catch (err) {
     return res.status(401).json({ error: "token जाँच fail", detail: err.message });
@@ -96,6 +115,22 @@ app.get("/articles/:id", async (req, res) => {
   );
   article.images = imgs.rows;
   res.json(article);
+});
+
+app.get("/articles/:id/images", async (req, res) => {
+  const result = await pool.query(
+    "SELECT id, image_url, image_id, caption FROM article_images WHERE article_id = $1 ORDER BY sort_order ASC, id ASC",
+    [req.params.id],
+  );
+  res.json(result.rows);
+});
+
+app.get("/articles/:id/comments", async (req, res) => {
+  const result = await pool.query(
+    "SELECT id, author_name, body, created_at FROM comments WHERE article_id = $1 AND approved = true ORDER BY created_at ASC",
+    [req.params.id],
+  );
+  res.json(result.rows);
 });
 
 app.post("/articles", requireAuth, async (req, res) => {
@@ -143,6 +178,38 @@ app.delete("/article-images/:imageId", requireAuth, async (req, res) => {
   await pool.query("DELETE FROM article_images WHERE id = $1", [
     req.params.imageId,
   ]);
+  res.json({ ok: true });
+});
+
+app.post("/articles/:id/comments", verifyGoogle, async (req, res) => {
+  const { body } = req.body;
+  if (!body || !body.trim()) {
+    return res.status(400).json({ error: "खाली टिप्पणी" });
+  }
+  const result = await pool.query(
+    "INSERT INTO comments (article_id, author_name, author_email, body) VALUES ($1, $2, $3, $4) RETURNING id",
+    [req.params.id, req.googleUser.name, req.googleUser.email, body.trim()],
+  );
+  res.json({ ok: true, id: result.rows[0].id });
+});
+
+app.get("/comments/pending", requireAuth, async (req, res) => {
+  const result = await pool.query(
+    "SELECT c.id, c.article_id, c.author_name, c.author_email, c.body, c.created_at, a.title AS article_title FROM comments c JOIN articles a ON a.id = c.article_id WHERE c.approved = false ORDER BY c.created_at ASC",
+  );
+  res.json(result.rows);
+});
+
+app.put("/comments/:id/approve", requireAuth, async (req, res) => {
+  const result = await pool.query(
+    "UPDATE comments SET approved = true WHERE id = $1 RETURNING *",
+    [req.params.id],
+  );
+  res.json(result.rows[0]);
+});
+
+app.delete("/comments/:id", requireAuth, async (req, res) => {
+  await pool.query("DELETE FROM comments WHERE id = $1", [req.params.id]);
   res.json({ ok: true });
 });
 
