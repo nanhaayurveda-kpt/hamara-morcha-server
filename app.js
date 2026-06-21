@@ -60,9 +60,10 @@ app.get("/articles", async (req, res) => {
 });
 
 app.get("/articles/:id", async (req, res) => {
-  const result = await pool.query("SELECT * FROM articles WHERE id = $1", [
-    req.params.id,
-  ]);
+  const result = await pool.query(
+    "UPDATE articles SET views = COALESCE(views, 0) + 1 WHERE id = $1 RETURNING *",
+    [req.params.id],
+  );
   res.json(result.rows[0]);
 });
 
