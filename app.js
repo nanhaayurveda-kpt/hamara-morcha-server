@@ -76,16 +76,26 @@ app.get("/articles/:id", async (req, res) => {
     [id, ip],
   );
 
+  let article;
   if (seen.rowCount > 0) {
     const bumped = await pool.query(
       "UPDATE articles SET views = COALESCE(views, 0) + 1 WHERE id = $1 RETURNING *",
       [id],
     );
-    return res.json(bumped.rows[0]);
+    article = bumped.rows[0];
+  } else {
+    const result = await pool.query("SELECT * FROM articles WHERE id = $1", [id]);
+    article = result.rows[0];
   }
 
-  const result = await pool.query("SELECT * FROM articles WHERE id = $1", [id]);
-  res.json(result.rows[0]);
+  if (!article) return res.json(null);
+
+  const imgs = await pool.query(
+    "SELECT id, image_url, image_id, caption FROM article_images WHERE article_id = $1 ORDER BY sort_order ASC, id ASC",
+    [id],
+  );
+  article.images = imgs.rows;
+  res.json(article);
 });
 
 app.post("/articles", requireAuth, async (req, res) => {
@@ -108,6 +118,34 @@ app.put("/articles/:id", requireAuth, async (req, res) => {
   res.json(result.rows[0]);
 });
 
+app.post("/articles/:id/images", requireAuth, async (req, res) => {
+  const { image_url, image_id, caption } = req.body;
+  const result = await pool.query(
+    "INSERT INTO article_images (article_id, image_url, image_id, caption) VALUES ($1, $2, $3, $4) RETURNING *",
+    [req.params.id, image_url, image_id || null, caption || null],
+  );
+  res.json(result.rows[0]);
+});
+
+app.delete("/article-images/:imageId", requireAuth, async (req, res) => {
+  const found = await pool.query(
+    "SELECT image_id FROM article_images WHERE id = $1",
+    [req.params.imageId],
+  );
+  const imageId = found.rows[0]?.image_id;
+  if (imageId) {
+    try {
+      await cloudinary.uploader.destroy(imageId);
+    } catch (e) {
+      console.error("cloudinary destroy failed:", e.message);
+    }
+  }
+  await pool.query("DELETE FROM article_images WHERE id = $1", [
+    req.params.imageId,
+  ]);
+  res.json({ ok: true });
+});
+
 app.delete("/articles/:id", requireAuth, async (req, res) => {
   const found = await pool.query("SELECT image_id FROM articles WHERE id = $1", [
     req.params.id,
@@ -120,6 +158,21 @@ app.delete("/articles/:id", requireAuth, async (req, res) => {
       console.error("cloudinary destroy failed:", e.message);
     }
   }
+
+  const gallery = await pool.query(
+    "SELECT image_id FROM article_images WHERE article_id = $1",
+    [req.params.id],
+  );
+  for (const row of gallery.rows) {
+    if (row.image_id) {
+      try {
+        await cloudinary.uploader.destroy(row.image_id);
+      } catch (e) {
+        console.error("cloudinary destroy failed:", e.message);
+      }
+    }
+  }
+
   await pool.query("DELETE FROM articles WHERE id = $1", [req.params.id]);
   res.json({ ok: true });
 });
