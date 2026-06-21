@@ -14,6 +14,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+function getClientIp(req) {
+  const nf = req.headers["x-nf-client-connection-ip"];
+  if (nf) return nf.trim();
+  const fwd = req.headers["x-forwarded-for"];
+  if (fwd) return fwd.split(",")[0].trim();
+  return "unknown";
+}
+
 const ALLOWED = (process.env.ALLOWED_EMAILS || "")
   .split(",")
   .map((e) => e.trim().toLowerCase())
@@ -60,10 +68,23 @@ app.get("/articles", async (req, res) => {
 });
 
 app.get("/articles/:id", async (req, res) => {
-  const result = await pool.query(
-    "UPDATE articles SET views = COALESCE(views, 0) + 1 WHERE id = $1 RETURNING *",
-    [req.params.id],
+  const id = req.params.id;
+  const ip = getClientIp(req);
+
+  const seen = await pool.query(
+    "INSERT INTO article_views (article_id, ip) VALUES ($1, $2) ON CONFLICT (article_id, ip) DO NOTHING RETURNING article_id",
+    [id, ip],
   );
+
+  if (seen.rowCount > 0) {
+    const bumped = await pool.query(
+      "UPDATE articles SET views = COALESCE(views, 0) + 1 WHERE id = $1 RETURNING *",
+      [id],
+    );
+    return res.json(bumped.rows[0]);
+  }
+
+  const result = await pool.query("SELECT * FROM articles WHERE id = $1", [id]);
   res.json(result.rows[0]);
 });
 
